@@ -12,6 +12,9 @@ from functions.run_python import schema_run_python, run_python_file
 system_prompt = """
 You are a helpful AI coding agent.
 
+You are given a working directory called /calculator, a CLI calculator program. Your goal should be to interact with the existing CLI calculator as much as possible, and only generate new files when absolutely necessary.
+If the user prompt is a math question, you must use the CLI calculator as a user would. You should use the provided tools (like running main.py with arguments) whenever possible to answer the user's question.
+
 When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
 
 - List files and directories
@@ -49,7 +52,14 @@ def main():
     if verbose:
         print(f"User prompt: {prompt}")
 
-    generate_content(client, messages, verbose)
+    for i in range(0, 20):
+        try:
+            response = generate_content(client, messages, verbose)
+            if response:
+                print(response)
+                break            
+        except Exception as e:
+            print(f"Error: {e}")
 
         
 def generate_content(client, messages, verbose):
@@ -58,6 +68,14 @@ def generate_content(client, messages, verbose):
         model="gemini-2.0-flash-001", contents=messages, config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt)
     )
 
+    for candidate in response.candidates:
+        messages.append(candidate.content)
+
+    # keep track of used tokens in prompt and reponse
+    if verbose:
+        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+
     if response.function_calls:
         for function_call_part in response.function_calls:
             call_result = call_function(function_call_part, verbose)
@@ -65,13 +83,10 @@ def generate_content(client, messages, verbose):
                 raise Exception("Function call did not return response")
             if verbose:
                 print(f"-> {call_result.parts[0].function_response.response}")
-    else:
-        print(response.text)
 
-    # keep track of used tokens in prompt and reponse
-    if verbose:
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+            messages.append(call_result)
+    else:
+        return response.text
 
 def call_function(function_call_part, verbose=False):
     function_dict = {
@@ -90,13 +105,13 @@ def call_function(function_call_part, verbose=False):
     function_call_part.args["working_directory"] = "./calculator"
     try:
         function_result = function_dict[function_name](**function_call_part.args)
-    except:
+    except Exception as e:
         return types.Content(
             role="tool",
             parts=[
                 types.Part.from_function_response(
                     name=function_name,
-                    response={"error": f"Unknown function: {function_name}"},
+                    response={"error": f"{e}, possibly unknown function: {function_name}"},
                 )
             ],
         )

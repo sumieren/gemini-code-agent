@@ -12,11 +12,15 @@ schema_run_python = types.FunctionDeclaration(
                 type=types.Type.STRING,
                 description="The path to the file, relative to the working directory.",
             ),
+            "args": types.Schema(
+                type=types.Type.STRING,
+                description="The arguments passed to the function call.",
+            ),
         },
     ),
 )
 
-def run_python_file(working_directory, file_path):
+def run_python_file(working_directory, file_path, args=None):
     full_path = os.path.abspath(os.path.join(working_directory, file_path))
     abs_working_directory = os.path.abspath(working_directory)
 
@@ -29,8 +33,12 @@ def run_python_file(working_directory, file_path):
     if not full_path.endswith(".py"):
         return f'Error: "{file_path}" is not a Python file.'
     
+    commands = ["python3", file_path]
+    if args:
+        commands.extend(args)
+
     try:
-        captured_output = subprocess.run(["python3", file_path], timeout=30, capture_output=True, cwd=working_directory)
+        captured_output = subprocess.run(commands, timeout=30, capture_output=True, cwd=working_directory)
 
         stdout = captured_output.stdout.decode()
         stderr = captured_output.stderr.decode()
